@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Task Manager</title>
+
+<style>
+:root {
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --text: #0f172a;
+    --primary: #4f46e5;
+    --border: #e5e7eb;
+}
+
+.dark {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text: #e2e8f0;
+    --border: #334155;
+}
+
+body {
+    margin: 0;
+    font-family: "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 30px;
+}
+
+.app {
+    width: 850px;
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+    overflow: hidden;
+}
+
+.header {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header button {
+    background: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.content {
+    padding: 20px;
+}
+
+.input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+input, select {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+button {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+button:hover {
+    transform: scale(1.05);
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-danger { background: #ef4444; color: white; }
+.btn-light { background: #e5e7eb; }
+
+.search {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.task {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 10px;
+    transition: 0.2s;
+}
+
+.task:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.08);
+}
+
+.task.completed {
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+
+.task-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.category {
+    font-size: 12px;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 2px 8px;
+    border-radius: 6px;
+    width: fit-content;
+}
+
+.timestamp {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.actions button {
+    margin-left: 6px;
+}
+
+.empty {
+    text-align: center;
+    color: #94a3b8;
+    margin-top: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+    <div class="header">
+        <span>Smart Task Manager</span>
+        <button onclick="toggleDark()">🌙</button>
+    </div>
+
+    <div class="content">
+
+        <div class="input-group">
+            <input id="taskInput" placeholder="Enter task">
+            <select id="category">
+                <option>Personal</option>
+                <option>Work</option>
+            </select>
+            <button class="btn-primary" onclick="addTask()">Add</button>
+            <button class="btn-danger" onclick="clearAll()">Clear</button>
+        </div>
+
+        <input id="search" class="search" placeholder="Search..." oninput="renderTasks()">
+
+        <div class="filters">
+            <button class="btn-light" onclick="setFilter('all')">All</button>
+            <button class="btn-light" onclick="setFilter('completed')">Completed</button>
+            <button class="btn-light" onclick="setFilter('pending')">Pending</button>
+        </div>
+
+        <div id="taskList"></div>
+
+    </div>
+</div>
+
+<script>
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+let filter = "all";
+let dragIndex = null;
+
+// Fix old tasks (important)
+tasks = tasks.map(t => ({
+    ...t,
+    time: t.time || new Date().toLocaleString()
+}));
+
+// Dark mode persistence
+function toggleDark() {
+    document.body.classList.toggle("dark");
+    localStorage.setItem("dark", document.body.classList.contains("dark"));
+}
+if (localStorage.getItem("dark") === "true") {
+    document.body.classList.add("dark");
+}
+
+// Add task
+function addTask() {
+    const text = taskInput.value.trim();
+    if (!text) return;
+
+    tasks.push({
+        id: Date.now(),
+        text,
+        category: category.value,
+        completed: false,
+        time: new Date().toLocaleString()
+    });
+
+    taskInput.value = "";
+    save();
+}
+
+// Toggle
+function toggleTask(id) {
+    tasks = tasks.map(t => t.id === id ? {...t, completed: !t.completed} : t);
+    save();
+}
+
+// Delete
+function deleteTask(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    save();
+}
+
+// Edit
+function editTask(id) {
+    const t = tasks.find(x => x.id === id);
+    const newText = prompt("Edit task:", t.text);
+    if (newText) {
+        t.text = newText;
+        save();
+    }
+}
+
+// Clear
+function clearAll() {
+    tasks = [];
+    save();
+}
+
+// Filter
+function setFilter(f) {
+    filter = f;
+    renderTasks();
+}
+
+// Save
+function save() {
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+    renderTasks();
+}
+
+// Render
+function renderTasks() {
+    const list = document.getElementById("taskList");
+    const search = document.getElementById("search").value.toLowerCase();
+
+    list.innerHTML = "";
+
+    let filtered = tasks.filter(t => {
+        if (filter === "completed" && !t.completed) return false;
+        if (filter === "pending" && t.completed) return false;
+        if (!t.text.toLowerCase().includes(search)) return false;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        list.innerHTML = `<div class="empty">No tasks found</div>`;
+        return;
+    }
+
+    filtered.forEach((t, index) => {
+
+        const div = document.createElement("div");
+        div.className = "task" + (t.completed ? " completed" : "");
+        div.draggable = true;
+
+        div.ondragstart = () => dragIndex = index;
+        div.ondragover = e => e.preventDefault();
+        div.ondrop = () => {
+            const dragged = tasks[dragIndex];
+            tasks.splice(dragIndex, 1);
+            tasks.splice(index, 0, dragged);
+            save();
+        };
+
+        div.innerHTML = `
+            <div class="task-info">
+                <strong>${t.text}</strong>
+                <span class="category">${t.category}</span>
+                <span class="timestamp">${t.time || "Just now"}</span>
+            </div>
+            <div class="actions">
+                <button onclick="toggleTask(${t.id})">✔</button>
+                <button onclick="editTask(${t.id})">✎</button>
+                <button class="btn-danger" onclick="deleteTask(${t.id})">✖</button>
+            </div>
+        `;
+
+        list.appendChild(div);
+    });
+}
+
+renderTasks();
+</script>
+
+</body>
+</html>
